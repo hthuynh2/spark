@@ -110,6 +110,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             }
           }
 
+          logDebug("Hieu: enqueueSuccessfulTask tid==" + tid + " size == " + size)
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
           case cnf: ClassNotFoundException =>

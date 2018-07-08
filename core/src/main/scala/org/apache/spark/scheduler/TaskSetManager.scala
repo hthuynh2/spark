@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
 /**
@@ -723,10 +723,37 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
+
+    //HIEU: TEST:
+
+    result.accumUpdates = result.accumUpdates.map { a =>
+      if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
+        val acc = a.asInstanceOf[LongAccumulator]
+        logDebug("Hieu: handleSuccessfulTask: tid==" + tid + " size == " + acc.value)
+        acc
+      } else {
+        a
+      }
+    }
+
+    ///
     // Check if any other attempt succeeded before this and this attempt has not been handled
     if (successful(index) && killedByOtherAttempt(index)) {
+      calculatedTasks -= 1
+      result.accumUpdates = result.accumUpdates.map { a =>
+        if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
+          val acc = a.asInstanceOf[LongAccumulator]
+          totalResultSize -= acc.value
+          acc.setValue(0)
+          acc
+        } else {
+          a
+        }
+      }
+
+      val accumUpdates = result.accumUpdates.filter(a => a.countFailedValues)
       handleFailedTask(tid, TaskState.KILLED,
-        TaskKilled("Finish but did not commit due to another attempt succeeded"))
+        TaskKilled("Finish but did not commit due to another attempt succeeded",  Seq.empty, accumUpdates))
       return
     }
 
