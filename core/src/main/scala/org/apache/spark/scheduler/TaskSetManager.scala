@@ -724,22 +724,10 @@ private[spark] class TaskSetManager(
     val info = taskInfos(tid)
     val index = info.index
 
-    //HIEU: TEST:
-
-    result.accumUpdates = result.accumUpdates.map { a =>
-      if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
-        val acc = a.asInstanceOf[LongAccumulator]
-        logDebug("Hieu: handleSuccessfulTask: tid==" + tid + " size == " + acc.value)
-        acc
-      } else {
-        a
-      }
-    }
-
-    ///
     // Check if any other attempt succeeded before this and this attempt has not been handled
     if (successful(index) && killedByOtherAttempt(index)) {
       calculatedTasks -= 1
+      result.accumUpdates = result.accumUpdates.filter(_.countFailedValues)
       result.accumUpdates = result.accumUpdates.map { a =>
         if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
           val acc = a.asInstanceOf[LongAccumulator]
@@ -751,9 +739,9 @@ private[spark] class TaskSetManager(
         }
       }
 
-      val accumUpdates = result.accumUpdates.filter(a => a.countFailedValues)
       handleFailedTask(tid, TaskState.KILLED,
-        TaskKilled("Finish but did not commit due to another attempt succeeded",  Seq.empty, accumUpdates))
+        TaskKilled("Finish but did not commit due to another attempt succeeded",
+          Seq.empty, result.accumUpdates))
       return
     }
 

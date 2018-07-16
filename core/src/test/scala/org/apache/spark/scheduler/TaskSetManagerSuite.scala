@@ -1421,24 +1421,40 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched.dagScheduler.stop()
     sched.dagScheduler = mock(classOf[DAGScheduler])
     // Complete one attempt for the running task
-    val result = createTaskResult(3, accumUpdatesByTask(3))
-    manager.handleSuccessfulTask(3, result)
+    val result3 = createTaskResult(3, accumUpdatesByTask(3))
+    val result4 = createTaskResult(3, accumUpdatesByTask(3))
+
+    if(result4.accumUpdates.isEmpty){
+      println("Hieu: accumUpdatesByTask: empty")
+    }
+    for(acc <- result4.accumUpdates){
+      println(acc.name)
+    }
+
+    manager.handleSuccessfulTask(3, result3)
     // There is a race between the scheduler asking to kill the other task, and that task
     // actually finishing. We simulate what happens if the other task finishes before we kill it.
     verify(sched.backend).killTask(4, "exec1", true, "another attempt succeeded")
-    manager.handleSuccessfulTask(4, result)
+
+    println("Hieu: " + result4.accumUpdates.find(a => a.name == Some(InternalAccumulator.RESULT_SIZE)).get.value)
+    assert(result4.accumUpdates.find(a => a.name == Some(InternalAccumulator.RESULT_SIZE)).get.value != 0)
+    manager.handleSuccessfulTask(4, result4)
 
     val info3 = manager.taskInfos(3)
     val info4 = manager.taskInfos(4)
     assert(info3.successful)
     assert(info4.killed)
+    val result4Size = result4.accumUpdates.find(a => a.name == Some(InternalAccumulator.RESULT_SIZE))
+    assert(result4Size.isDefined)
+    assert(result4Size.get.value == 0)
+
     verify(sched.dagScheduler).taskEnded(
       manager.tasks(3),
-      TaskKilled("Finish but did not commit due to another attempt succeeded"),
+      TaskKilled("Finish but did not commit due to another attempt succeeded", Seq.empty, any()),
       null,
       Seq.empty,
       info4)
-    verify(sched.dagScheduler).taskEnded(manager.tasks(3), Success, result.value(),
-      result.accumUpdates, info3)
+    verify(sched.dagScheduler).taskEnded(manager.tasks(3), Success, result3.value(),
+      result3.accumUpdates, info3)
   }
 }
